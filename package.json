@@ -5,13 +5,14 @@
   "scripts": {
     "postinstall": "nuxi prepare",
     "dev": "nuxi dev",
-    "generate": "nuxi generate"
+    "generate": "nuxi generate",
+    "inspect:jsonld": "node -e \"const fs=require('node:fs');const paths=['.output/public/de/index.html','.output/public/en/index.html'];for(const p of paths){if(!fs.existsSync(p)){console.error('Run \\'npm run generate\\' first.');process.exit(1)}const m=fs.readFileSync(p,'utf8').match(/<script type=\\\"application\\/ld\\+json\\\"[^>]*>([\\s\\S]*?)<\\/script>/);console.log('---',p,'---');console.log(m?m[1]:'(no ld+json)')}\""
   },
   "devDependencies": {
     "@nuxtjs/i18n": "10.4.0",
     "nuxt": "4.4.6",
     "nuxt-schema-org": "6.0.4",
-    "typescript": "~5.9.0",
-    "vue-tsc": "~3.0.0"
+    "typescript": "6.0.3",
+    "vue-tsc": "3.3.2"
   }
 }

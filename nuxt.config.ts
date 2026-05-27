@@ -4,12 +4,15 @@ export default defineNuxtConfig({
 
   site: {
     url: 'https://example.com',
+    defaultLocale: 'de-DE',
   },
 
-  // `strategy: 'prefix'` is the trigger: every locale (including the
-  // default) gets a URL prefix. nuxt-schema-org's `resolveIdForLocale`
-  // assumes the default locale is unprefixed and emits a dangling
-  // translationOfWork.@id.
+  // `strategy: 'prefix'` is the trigger. Every locale — including the
+  // default — is served under `<host>/<locale>/`. Each locale's WebSite
+  // `@id` is therefore prefixed, but nuxt-schema-org's automatic i18n
+  // integration emits `translationOfWork.@id` for non-default locales that
+  // resolves to the unprefixed `<host>/#website`, which has no matching
+  // node in the graph.
   i18n: {
     baseUrl: 'https://example.com',
     defaultLocale: 'de',
