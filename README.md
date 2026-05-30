@@ -1,10 +1,11 @@
 # Repro: `nuxt-schema-org@6.0.4` `translationOfWork.@id` dangles under i18n `strategy: 'prefix'`
 
-Minimal Nuxt 4 project showing that the schema-org / `@nuxtjs/i18n`
+Minimal Nuxt 4 project showing that the schema-org and `@nuxtjs/i18n`
 auto-integration emits a `translationOfWork.@id` for every non-default
-locale that references the unprefixed `<host>#website` — a node that
-does not exist when every locale (including the default) is served at a
-prefixed URL under `strategy: 'prefix'`.
+locale that references the unprefixed `<host>/#website`. Under
+`strategy: 'prefix'` every locale (including the default) lives at
+`<host>/<locale>/`, so the unprefixed `@id` is a node that never appears
+in the graph.
 
 ## Steps to reproduce
 
@@ -16,38 +17,44 @@ npm run inspect:jsonld
 
 1. `nuxi generate` prerenders `/de/` and `/en/`.
 2. `inspect:jsonld` prints the `application/ld+json` block from each
-   prerendered page. The English page's `WebSite` node looks like:
+   prerendered page.
+3. The English page's `WebSite` node looks like:
 
    ```jsonc
    {
-     "@id": "https://example.com/en/#website",
+     "@id": "https://example.com/en#website",
      "@type": "WebSite",
+     "inLanguage": "en-US",
      "translationOfWork": {
-       "@type": "WebSite",
-       "@id": "https://example.com/#website"   // ← dangling
+       "@id": "https://example.com/#website"   // dangling
      }
    }
    ```
 
-3. The German page's `WebSite` `@id` is `https://example.com/de/#website`
-   and its `workTranslation[0].@id` correctly references
-   `https://example.com/en/#website`. The asymmetry — `workTranslation`
-   on the default locale uses prefixed `@id`s; `translationOfWork` on
-   non-default locales uses the unprefixed default — leaves every
-   non-default locale's `translationOfWork` pointing at a node that
-   never appears in the graph.
+4. The German page's `WebSite` `@id` is
+   `https://example.com/de#website`. Its `workTranslation` array
+   contains `https://example.com/en#website` (correct) plus
+   `https://example.com/de#website` (a self-reference, a separate bug).
+
+The asymmetry is the core issue. `workTranslation` on the default
+locale page uses the prefixed `/de#website` form, but the corresponding
+`translationOfWork.@id` on the non-default locale page uses the
+unprefixed `/#website` form, so the cross-locale references never
+resolve.
 
 ## Expected behaviour
 
 Under `strategy: 'prefix'`, the default locale's `WebSite` `@id` is
 prefixed (`<host>/<defaultLocale>/#website`).
 `translationOfWork.@id` on every other locale must reference that same
-prefixed `@id` so the cross-locale links form a complete graph.
+prefixed `@id`, so cross-locale links form a complete graph.
 
 ## Actual behaviour
 
-Non-default locales reference `<host>#website` (no prefix), which is
-never declared.
+`translationOfWork.@id` on non-default locales resolves to the
+unprefixed `<host>/#website`, which is never declared. The
+`workTranslation` array on the default locale also includes the default
+locale itself, which is a related but distinct bug.
 
 ## Root cause
 
@@ -56,14 +63,7 @@ never declared.
 ```js
 const resolveIdForLocale = (locale) => {
   if (locale.domain) {
-    return resolveSitePath(localePath('index', locale.code), {
-      absolute: true,
-      siteUrl: hasProtocol(locale.domain, { acceptRelative: false })
-        ? locale.domain
-        : withHttps(locale.domain),
-      trailingSlash: siteConfig.trailingSlash,
-      base: nuxtBase,
-    })
+    return resolveSitePath(localePath('index', locale.code), { /* ... */ })
   }
   return pathResolver(localePath('index', locale.code)).value
 }
@@ -77,19 +77,19 @@ if (siteConfig.defaultLocale) {
   } else {
     website.workTranslation = locales
       .filter(locale => locale.code !== siteConfig.defaultLocale)
-      .map(locale => /* … prefixed @id … */)
+      .map(locale => /* prefixed @id */)
   }
 }
 ```
 
-Under `@nuxtjs/i18n` `strategy: 'prefix'`, `localePath('index', '<defaultLocale>')`
-returns `/`, *not* `/<defaultLocale>/`, because `@nuxtjs/i18n` treats the
-default locale specially in `localePath`. `resolveIdForLocale` therefore
-produces the bare-host form for the default locale, and
-`translationOfWork.@id` is built from that.
+Under `@nuxtjs/i18n` `strategy: 'prefix'`,
+`localePath('index', '<defaultLocale>')` returns `/`, not
+`/<defaultLocale>/`. The resolver therefore produces the bare-host form
+for the default locale, even though the `WebSite` node the same module
+emits for the default locale is correctly built at the prefixed URL.
 
 The fix needs to override the resolver for the default locale under
-`strategy: 'prefix'` — either by branching on the active i18n strategy
+`strategy: 'prefix'`, either by branching on the active i18n strategy
 or by reading the actual prefixed URL the module already emits for the
 default locale's `WebSite` node.
 
@@ -102,18 +102,27 @@ useSchemaOrg([
 ```
 
 This collapses every locale's `WebSite` `@id` to the unprefixed form,
-breaking `@id` uniqueness across locales and turning every
-`workTranslation` reference into a dangling one as well. Net regression.
+breaking `@id` uniqueness and turning every `workTranslation`
+reference into a dangling one as well. Net regression.
+
+## Repro setup notes
+
+This repro requires both `experimental.strictSeo: true` (so i18n owns
+the SEO surface that schema-org reads) and a `pages/` directory (so
+`localePath` resolves through the file-based router during prerender).
+Without `pages/`, schema-org collapses every locale into a single
+`/index#website` node and the bug surface looks different (no
+`translationOfWork` field appears at all).
 
 ## Related upstream activity
 
-- PR [`harlan-zw/nuxt-schema-org#77`](https://github.com/harlan-zw/nuxt-schema-org/pull/77) —
+- PR [`harlan-zw/nuxt-schema-org#77`](https://github.com/harlan-zw/nuxt-schema-org/pull/77),
   *"fix: correct translationOfWork reference"* (merged 2025-02-20).
-  Added the auto-emitted `workTranslation` / `translationOfWork` linkage.
-  It assumes the default locale is served unprefixed (the
-  `prefix_except_default` model), which is correct for that strategy
-  but wrong for `strategy: 'prefix'`. The bug reproduced here is the
-  residual gap left by #77.
+  Added the auto-emitted `workTranslation` and `translationOfWork`
+  linkage. The implementation assumes the default locale is served
+  unprefixed (the `prefix_except_default` model), which is correct for
+  that strategy but wrong for `strategy: 'prefix'`. The bug reproduced
+  here is the residual gap left by #77.
 
 No follow-up issue or PR addresses `strategy: 'prefix'` at the time of
 writing.
@@ -124,4 +133,4 @@ writing.
 - `nuxt-schema-org@6.0.4`
 - `@nuxtjs/i18n@10.4.0`
 - `typescript@6.0.3`
-- Node.js ≥ 20.19
+- Node.js v24.16.0
