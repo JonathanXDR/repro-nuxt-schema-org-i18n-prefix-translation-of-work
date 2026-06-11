@@ -1,4 +1,4 @@
-# Repro: `nuxt-schema-org@6.0.4` `translationOfWork.@id` dangles under i18n `strategy: 'prefix'`
+# Repro: `nuxt-schema-org@6.0.4` `translationOfWork.@id` dangles under i18n `strategy: 'prefix'` (verified unchanged in 6.2.1)
 
 Minimal Nuxt 4 project showing that the schema-org and `@nuxtjs/i18n`
 auto-integration emits a `translationOfWork.@id` for every non-default
@@ -54,7 +54,7 @@ prefixed `@id`, so cross-locale links form a complete graph.
 `translationOfWork.@id` on non-default locales resolves to the
 unprefixed `<host>/#website`, which is never declared. The
 `workTranslation` array on the default locale also includes the default
-locale itself, which is a related but distinct bug.
+locale itself. Both symptoms share the same root cause, see below.
 
 ## Root cause
 
@@ -82,16 +82,41 @@ if (siteConfig.defaultLocale) {
 }
 ```
 
-Under `@nuxtjs/i18n` `strategy: 'prefix'`,
-`localePath('index', '<defaultLocale>')` returns `/`, not
-`/<defaultLocale>/`. The resolver therefore produces the bare-host form
-for the default locale, even though the `WebSite` node the same module
-emits for the default locale is correctly built at the prefixed URL.
+The plugin treats `siteConfig.defaultLocale` as an i18n locale CODE,
+but nuxt-site-config's i18n integration populates it with the locale's
+LANGUAGE TAG whenever locales declare `language` (see
+`resolveDefaultLocale` in
+`nuxt-site-config/dist/runtime/app/plugins/i18n.js`, which returns
+`locale.language || locale.iso || i18n.defaultLocale`). With the
+locales in this repro, `siteConfig.defaultLocale` is `'de-DE'`, not
+`'de'`. Two comparisons break as a result:
 
-The fix needs to override the resolver for the default locale under
-`strategy: 'prefix'`, either by branching on the active i18n strategy
-or by reading the actual prefixed URL the module already emits for the
-default locale's `WebSite` node.
+1. `resolveIdForLocale({ code: 'de-DE' })` calls
+   `localePath('index', 'de-DE')` with an unknown locale code, so
+   vue-i18n routing falls back to the unprefixed path. Note that
+   `localePath('index', 'de')` WOULD correctly return `/de/` under
+   `strategy: 'prefix'`, so the strategy is only what makes the
+   fallback visible, not the cause.
+2. The `workTranslation` filter
+   `locale.code !== siteConfig.defaultLocale` compares the code `'de'`
+   against the tag `'de-DE'` and never matches, which is why the
+   default locale lists itself as its own translation.
+
+The branch selection above these lines
+(`siteConfig.currentLocale !== siteConfig.defaultLocale`) happens to
+work because both sides are tags there.
+
+Suggested fix: resolve the default locale's CODE from the i18n
+instance (`nuxtApp.$i18n.defaultLocale`) instead of
+`siteConfig.defaultLocale`, and use it for both `resolveIdForLocale`
+and the `workTranslation` filter. Alternatively look the locale object
+up by `language === siteConfig.defaultLocale` and use its `code`.
+
+A config-side workaround does not exist: nuxt-site-config's i18n
+plugin pushes `defaultLocale` at `SiteConfigPriority.i18n` (-2), which
+outranks `nuxt.config` site config (-3), so a user-provided
+`site.defaultLocale` value cannot change the runtime value while i18n
+is active.
 
 ## Failed user-side workaround
 
