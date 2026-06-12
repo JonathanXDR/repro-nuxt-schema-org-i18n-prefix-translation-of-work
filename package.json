@@ -11,7 +11,7 @@
   "devDependencies": {
     "@nuxtjs/i18n": "10.4.0",
     "nuxt": "4.4.6",
-    "nuxt-schema-org": "6.0.4",
+    "nuxt-schema-org": "6.2.1",
     "typescript": "6.0.3",
     "vue-tsc": "3.3.2"
   }
