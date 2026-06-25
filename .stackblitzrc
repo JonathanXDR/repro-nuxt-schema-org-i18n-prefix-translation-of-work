@@ -1,4 +1,4 @@
 {
   "installDependencies": true,
-  "startCommand": "npm run generate"
+  "startCommand": "npm run generate && npm run inspect:jsonld"
 }

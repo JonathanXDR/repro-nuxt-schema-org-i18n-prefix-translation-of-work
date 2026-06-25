@@ -1,4 +1,4 @@
-# Repro: `nuxt-schema-org@6.0.4` `translationOfWork.@id` dangles under i18n `strategy: 'prefix'` (verified unchanged in 6.2.1)
+# Repro: `nuxt-schema-org@6.2.1` `translationOfWork.@id` dangles under i18n `strategy: 'prefix'`
 
 Minimal Nuxt 4 project showing that the schema-org and `@nuxtjs/i18n`
 auto-integration emits a `translationOfWork.@id` for every non-default
@@ -155,7 +155,8 @@ writing.
 ## Environment
 
 - `nuxt@4.4.6`
-- `nuxt-schema-org@6.0.4`
+- `nuxt-schema-org@6.2.1`
+- `nuxt-site-config@4.1.0`
 - `@nuxtjs/i18n@10.4.0`
 - `typescript@6.0.3`
-- Node.js v24.16.0
+- Node.js v24
