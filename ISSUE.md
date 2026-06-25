@@ -41,8 +41,6 @@ The two symptoms are asymmetric. `workTranslation` on the default page uses the 
 
 https://stackblitz.com/github/JonathanXDR/repro-nuxt-schema-org-i18n-prefix-translation-of-work
 
-The StackBlitz start command runs `npm run generate && npm run inspect:jsonld`, which prerenders `/de/` and `/en/` and prints the `application/ld+json` block from each so both symptoms are visible in the terminal.
-
 ## 🌈 Expected behavior
 
 Under `strategy: 'prefix'` the default locale's `WebSite` `@id` is prefixed (`<host>/<defaultLocale>/#website`). Every non-default locale's `translationOfWork.@id` should reference that same prefixed `@id`, and the default locale's `workTranslation` should exclude the default locale itself, so the cross-locale references form a complete graph.
